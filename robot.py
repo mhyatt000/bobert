@@ -1,143 +1,101 @@
 import os
-import serial
 import time
 
-def setAngle(number, angle):                    #sets the servo to a RELATIVE angle
-    f = serial.Serial("/dev/ttyUSB0",115200)    #opening the serial port and setting baudrate
-    f.write(f"#{number}MD{angle}\r".encode())   #writing to the file
-    f.close()
+import serial
 
 
-def posInDegrees(number, angle):                #sets the servo to an ABSOLUTE angle
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}D{angle}\r".encode())
-    f.close()
+def toserial():
+    """writes the result of func to serial port"""
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            with open(serial.Serial("/dev/ttyUSB0", 115200), "w") as file:
+                file.write(str(result.encode()))
+
+            return result
+
+        return wrapper
+
+    return decorator
 
 
-def wheelModeDegrees(number, angle):            #sets servo to wheel mode where it rotates in that direction (nonstop)
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}WD{angle}\r".encode())
-    f.close()
+@toserial()
+def servo(unit, cmd, value, sleep=True):
+    """select a servo command"""
 
-def halt(number):                               #causes servo to stop immediately and hold that angular position
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}H\r".encode())
-    f.close()
+    cmds = {
+        # set to relative angle
+        "relative": f"#{unit}MD{value}\r",
+        # set to absolute angle
+        "absolute": f"#{unit}D{value}\r",
+        # set to wheel mode where it rotates in that direction (nonstop)
+        "wheel": f"#{unit}WD{value}\r",
+        # stop immediately and hold that angular position
+        "halt": f"#{unit}H\r",
+        # reset individual servos
+        "reset": f"#{unit}RESET\r",
+        # make servo limp
+        "limp": f"#{unit}L\r",
+        # the angular acceleration speed of each servo
+        # accepts values between 1 and 100, increments of 10 degrees per sec squared
+        "accelerate": f"#{unit}AA{value}\r",
+        # determines the servo's ability to hold a desired position under load
+        # values between -10 and 10
+        "stiff": f"#{unit}AH{value}\r",
+        # used to have the servo move to a specific angle upon power up
+        "start": f"#{unit}CFD\r",
+    }
 
-def firstPos(number):                           #used to have the servo move to a specific angle upon power up
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}CFD\r".encode())
-    f.close()
-
-for x in range(6):                              #makes all servos go limp when turning on
-    firstPos(x)
-
-#Reset command
-def reset(number):                              #use to reset individual servos
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}RESET\r".encode())
-    f.close()
-
-def resetAll():                                 #use to reset all servos
-    time.sleep(1)
-    for x in range(6):
-        reset(x)
+    out = cmds[cmd]
+    assert not "None" in out, "cant have None cmd"
+    if sleep:
+        time.sleep(0.25)
+    return out
 
 
-#Limp command
-def limp(number):                               #make individual servos limp
-    f = serial.Serial("/dev/ttyUSB0", 115200)
-    f.write(f"#{number}L\r".encode())
-    f.close()
+def allservo(cmd, value):
+    for i in range(6):
+        servo(i, cmd, value, sleep=False)
 
-def limpAll():
-    for x in range(6):
-        limp(x)
 
-#ANGULAR ACCELERATION/DECELERATION
-def angAccel(number,speed):                     #the angular acceleration speed of each servo
-    f = serial.Serial("/dev/ttyUSB0", 115200)   #accepts values between 1 and 100, increments of 10 degrees per sec squared
-    f.write(f"#{number}AA{speed}\r".encode())
-    f.close()
+# MOVEMENTS, all movements end in the default position
+def pickUp():
+    """only picks up"""
 
-def angDecel(number,speed):                     #the angular deceleration speed of each servo
-    f = serial.Serial("/dev/ttyUSB0", 115200)   #accepts values between 1 and 100, increments of 10 degrees per sec squared
-    f.write(f"#{number}AA{speed}\r".encode())
-    f.close()
+    servo(2, "absolute", 310)
+    servo(3, "absolute", 300)
+    servo(5, "absolute", -600)
+    servo(3, "absolute", 900)
+    servo(4, "absolute", 650)
+    servo(5, "absolute", 1)
+    servo(3, "absolute", 300)
 
-for x in range(6):                              #for loop used to make ang accel and decel for each servo 10 (a comfortable speed)
-    angAccel(x, 10)
-    angDecel(x, 10)
 
-#ANGULAR HOLDING STIFFNESS
-def holdStif(number, stiffness):                #determines the servo's ability to hold a desired position under load
-    f = serial.Serial("/dev/ttyUSB0", 115200)   #values between -10 and 10
-    f.write(f"#{number}AH{stiffness}\r".encode())
-    f.close()
+def put_down(loc="center"):
+    """puts down turning robot servo 1 to 200 degrees"""
 
-holdStif(5, -9)                                 #sets the holding stiffness for servo 5 to -9
+    loc = 200 if loc == "right" else 1500 if loc == "left" else 800
 
-#MOVEMENTS, all movements end in the default position
-def pickUp():                                   #only picks up
-    posInDegrees(2, 310)
-    posInDegrees(3, 300)
-    posInDegrees(5, -600)
-    time.sleep(2)                               #movements temporarily sleep for alloted time (seconds)
-    posInDegrees(3, 900)
-    time.sleep(1)
-    posInDegrees(4, 650)
-    time.sleep(2)
-    posInDegrees(5, 1)
-    time.sleep(2)
-    posInDegrees(3, 300)
+    servo(1, "absolute", loc)
+    servo(3, "absolute", 900)
+    servo(5, "absolute", -600)
+    servo(3, "absolute", 300)
+    servo(1, "absolute", 800)
 
-def putDown():                                  #only puts down
-    posInDegrees(3, 900)
-    time.sleep(2)
-    posInDegrees(5, -600)
-    time.sleep(1)
-    posInDegrees(3, 300)
 
-def putDownRight():                             #puts down turning robot servo 1 to 200 degrees
-    posInDegrees(1, 200)
-    time.sleep(1)
-    posInDegrees(3, 900)
-    time.sleep(1)
-    posInDegrees(5, -600)
-    time.sleep(1)
-    posInDegrees(3, 300)
-    time.sleep(1)
-    posInDegrees(1, 800)
+def main():
+    """pick up and put down first "right" and then "left"""
 
-def putDownLeft():                              #puts down turning robot servo 1 to 1500 degrees
-    posInDegrees(1, 1500)
-    time.sleep(1)
-    posInDegrees(3, 900)
-    time.sleep(1)
-    posInDegrees(5, -600)
-    time.sleep(1)
-    posInDegrees(3, 300)
-    time.sleep(1)
-    posInDegrees(1, 800)
+    allservo("start")
+    allservo("accelerate", 10)
 
-def mainRight():                                #pick up and put down "right" aka 200 degrees
-    pickUp()
-    time.sleep(1)
-    putDownRight()
+    # sets the holding stiffness for servo 5 to -9
+    servo(5, "stiff", -9)
 
-def mainLeft():                                 #pick up and put down "left" aka 1500 degrees
-    pickUp()
-    time.sleep(1)
-    putDownLeft()
+    pick_up()
+    put_down()
 
-def main():                                     #pick up and put down first "right" and then "left"
-    mainRight()
-    time.sleep(1)
-    mainLeft()
-
-#os.system
 
 if __name__ == "__main__":
     main()
-
-
